@@ -58,4 +58,4 @@ dummy4 = DummyOperator(
 )
 
 for table in return_tables():
-    dummy1>>load_to_bronze_group(table) >> dummy2>> dummy3 >> load_to_silver_group(table) >> dummy4
+    dummy1 >> load_to_bronze_group(table) >> dummy2 >> dummy3 >> load_to_silver_group(table) >> dummy4
