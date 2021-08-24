@@ -5,7 +5,6 @@ from datetime import datetime
 
 from python_functions.funcs import load_to_bronze_spark, load_to_silver_spark
 
-
 default_args = {
     "owner": "airflow",
     "email_on_failure": False

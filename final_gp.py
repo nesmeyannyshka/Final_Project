@@ -5,7 +5,6 @@ from datetime import datetime
 
 from python_functions.funcs import dwh
 
-
 default_args = {
     "owner": "airflow",
     "email_on_failure": False

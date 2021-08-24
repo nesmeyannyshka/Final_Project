@@ -50,4 +50,5 @@ dummy4 = DummyOperator(
     task_id='finish_load_to_silver',
     dag=dag
 )
+
 dummy1 >> api_bronze >>dummy2 >> dummy3 >> api_silver >>dummy4

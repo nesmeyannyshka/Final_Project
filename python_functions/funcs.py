@@ -11,7 +11,6 @@ from datetime import datetime
 
 import pyspark
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType
 import pyspark.sql.functions as F
 
 #Postgres functions
@@ -122,10 +121,8 @@ def dwh():
     logging.info("Building Spark Session")
     now = datetime.now().date().strftime("%Y-%m-%d")
     spark = SparkSession.builder \
-        .config('spark.driver.extraClassPath'
-                , '/home/user/shared_folder/postgresql-42.2.23.jar') \
         .master('local') \
-        .appName('load_to_dwh') \
+        .appName('read_from_Silver') \
         .getOrCreate()
 
     logging.info(f"Reading data from Silver")
@@ -138,7 +135,7 @@ def dwh():
     clients_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', now, 'clients'))
     stores_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', now, 'stores'))
     location_areas_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', now, 'location_areas'))
-    
+
     logging.info("Creating table fact_order")
     fact_order=orders_df\
         .withColumn('order_id', orders_df.order_id.cast('int'))\
@@ -147,13 +144,14 @@ def dwh():
         .withColumn('store_id', orders_df.store_id.cast('int'))\
         .withColumn('quantity', orders_df.quantity.cast('int'))\
         .withColumn('order_date', orders_df.order_date.cast('date'))\
-        .withColumnRenamed('order_date','fc_date')
+        .withColumnRenamed('order_date','fc_date')\
+        .sort('order_id')
 
     logging.info("Creating table fact_oos")
     fact_oos=oos_df\
-        .withColumn('product_id', oos_df.product_id.cast('int'))\
-        .withColumn('date', oos_df.date.cast('date'))\
-        .withColumnRenamed('date','fc_date')
+        .withColumn('product_id', oos_df.product_id.cast('int')) \
+        .withColumnRenamed('date', 'fc_date')\
+        .sort('product_id')
 
     logging.info("Processing tables products_df, aisles_df, department_df")
     products_df=products_df\
@@ -171,7 +169,8 @@ def dwh():
     dim_products=products_df\
         .join(aisles_df, on='aisle_id', how='left')\
         .join(departments_df, on='department_id', how='left')\
-        .select('product_id', 'product_name', 'aisle','department')
+        .select('product_id', 'product_name', 'aisle','department')\
+        .sort('product_id')
 
     logging.info("Processing tables stores_df, store_types_df, location_areas_df")
     stores_df=stores_df\
@@ -189,7 +188,8 @@ def dwh():
     dim_stores=stores_df\
         .join(store_types_df, on='store_type_id')\
         .join(location_areas_df, stores_df.location_area_id==location_areas_df.area_id)\
-        .select('store_id', 'type', 'area')
+        .select('store_id', 'type', 'area')\
+        .sort('store_id')
 
     logging.info("Processing table clients_df")
     clients_df=clients_df\
@@ -200,7 +200,8 @@ def dwh():
     logging.info("Creating dimension table dim_clients")
     dim_clients=clients_df\
         .join(location_areas_df, clients_df.location_area_id==location_areas_df.area_id)\
-        .select('client_id', 'fullname', 'area')
+        .select('client_id', 'fullname', 'area')\
+        .sort('client_id')
 
     logging.info("Creating dimension table dim_dates")
     dim_dates=fact_oos\
@@ -212,12 +213,20 @@ def dwh():
                 F.date_format('fc_date','M').alias('n_month'),
                 F.date_format('fc_date','yyyy').alias('n_year'))
 
+    logging.info("Building another Spark Session for DWH")
+    spark = SparkSession.builder \
+        .config('spark.driver.extraClassPath'
+                , '/home/user/shared_folder/postgresql-42.2.23.jar') \
+        .master('local') \
+        .appName('load_to_dwh') \
+        .getOrCreate()
+
     logging.info("Download tables in database")
-    fact_order.write.option("truncate", "true").jdbc(gp_url, table='fact_order', properties=gp_properties, mode='overwrite')
-    fact_oos.write.option("truncate", "true").jdbc(gp_url, table='fact_oos', properties=gp_properties, mode='overwrite')
-    dim_products.write.option("truncate", "true").jdbc(gp_url, table='dim_products', properties=gp_properties, mode='overwrite')
-    dim_stores.write.option("truncate", "true").jdbc(gp_url, table='dim_stores', properties=gp_properties, mode='overwrite')
-    dim_clients.write.option("truncate", "true").jdbc(gp_url, table='dim_clients', properties=gp_properties, mode='overwrite')
-    dim_dates.write.option("truncate", "true").jdbc(gp_url, table='dim_dates', properties=gp_properties, mode='overwrite')
+    fact_order.write.jdbc(gp_url, table='fact_order', properties=gp_properties, mode='overwrite')
+    fact_oos.write.jdbc(gp_url, table='fact_oos', properties=gp_properties, mode='overwrite')
+    dim_products.write.jdbc(gp_url, table='dim_products', properties=gp_properties, mode='overwrite')
+    dim_stores.write.jdbc(gp_url, table='dim_stores', properties=gp_properties, mode='overwrite')
+    dim_clients.write.jdbc(gp_url, table='dim_clients', properties=gp_properties, mode='overwrite')
+    dim_dates.write.jdbc(gp_url, table='dim_dates', properties=gp_properties, mode='overwrite')
 
     logging.info("Successfully loaded")
