@@ -150,6 +150,7 @@ def dwh():
     logging.info("Creating table fact_oos")
     fact_oos=oos_df\
         .withColumn('product_id', oos_df.product_id.cast('int')) \
+        .withColumn('date', oos_df.date.cast('timestamp')) \
         .withColumnRenamed('date', 'fc_date')\
         .sort('product_id')
 
@@ -207,11 +208,11 @@ def dwh():
     dim_dates=fact_oos\
         .select('fc_date')\
         .distinct()\
-        .select('fc_date',
-                F.date_format('fc_date','d').alias('n_day'),
+        .select(fact_oos.fc_date.cast('date'),
+                F.date_format('fc_date','d').cast('int').alias('n_day'),
                 F.date_format('fc_date','E').alias('n_week'),
-                F.date_format('fc_date','M').alias('n_month'),
-                F.date_format('fc_date','yyyy').alias('n_year'))
+                F.date_format('fc_date','M').cast('int').alias('n_month'),
+                F.date_format('fc_date','yyyy').cast('int').alias('n_year'))
 
     logging.info("Building another Spark Session for DWH")
     spark = SparkSession.builder \
