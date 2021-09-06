@@ -59,7 +59,7 @@ def load_to_silver_spark(table):
     table_df=table_df.dropDuplicates()
 
     logging.info(f"Writing table {table} to Silver")
-    table_df.write.parquet(os.path.join('/', 'new_datalake','silver',now, table), mode='overwrite')
+    table_df.write.parquet(os.path.join('/', 'new_datalake','silver', table), mode='overwrite')
 
     logging.info("Successfully loaded")
 
@@ -107,7 +107,7 @@ def api_to_silver():
     oos=oos.dropDuplicates()
 
     logging.info(f"Writing API data to Silver")
-    oos.write.parquet(os.path.join('/', 'new_datalake','silver',now, f'out_of_stock_{now}'), mode='overwrite')
+    oos.write.parquet(os.path.join('/', 'new_datalake','silver', f'out_of_stock'), mode='overwrite')
 
     logging.info("Successfully loaded")
 
@@ -116,25 +116,26 @@ def dwh():
     logging.info("Creating connection parameters")
     gp_conn = BaseHook.get_connection('gp_conn')
     gp_url = f"jdbc:postgresql://{gp_conn.host}:{gp_conn.port}/postgres"
-    gp_properties = {"user": gp_conn.login, "password": gp_conn.password}
+    gp_properties = {"user": gp_conn.login, "password": gp_conn.password, "driver": 'org.postgresql.Driver'}
 
     logging.info("Building Spark Session")
-    now = datetime.now().date().strftime("%Y-%m-%d")
     spark = SparkSession.builder \
         .master('local') \
-        .appName('read_from_Silver') \
+        .config('spark.driver.extraClassPath'
+                , '/home/user/shared_folder/postgresql-42.2.23.jar') \
+        .appName('load_to_dwh') \
         .getOrCreate()
 
     logging.info(f"Reading data from Silver")
-    oos_df = spark.read.parquet(os.path.join('/', 'new_datalake','silver',now, f'out_of_stock_{now}'))
-    store_types_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', now, 'store_types'))
-    orders_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', now, 'orders'))
-    products_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', now, 'products'))
-    departments_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', now, 'departments'))
-    aisles_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', now, 'aisles'))
-    clients_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', now, 'clients'))
-    stores_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', now, 'stores'))
-    location_areas_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', now, 'location_areas'))
+    oos_df = spark.read.parquet(os.path.join('/', 'new_datalake','silver','out_of_stock'))
+    store_types_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', 'store_types'))
+    orders_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver','orders'))
+    products_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', 'products'))
+    departments_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', 'departments'))
+    aisles_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver', 'aisles'))
+    clients_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver',  'clients'))
+    stores_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver',  'stores'))
+    location_areas_df = spark.read.parquet(os.path.join('/', 'new_datalake', 'silver',  'location_areas'))
 
     logging.info("Creating table fact_order")
     fact_order=orders_df\
@@ -213,14 +214,6 @@ def dwh():
                 F.date_format('fc_date','E').alias('n_week'),
                 F.date_format('fc_date','M').cast('int').alias('n_month'),
                 F.date_format('fc_date','yyyy').cast('int').alias('n_year'))
-
-    logging.info("Building another Spark Session for DWH")
-    spark = SparkSession.builder \
-        .config('spark.driver.extraClassPath'
-                , '/home/user/shared_folder/postgresql-42.2.23.jar') \
-        .master('local') \
-        .appName('load_to_dwh') \
-        .getOrCreate()
 
     logging.info("Download tables in database")
     fact_order.write.jdbc(gp_url, table='fact_order', properties=gp_properties, mode='overwrite')

@@ -31,35 +31,16 @@ api_silver=PythonOperator(
 )
 
 dummy1 = DummyOperator(
-    task_id='start_load_to_bronze',
+    task_id='start_load_api',
     dag=dag
 )
 
 dummy2 = DummyOperator(
-    task_id='finish_load_to_bronze',
-    dag=dag
-)
-
-dummy3 = DummyOperator(
-    task_id='start_load_to_silver',
-    dag=dag
-)
-
-dummy4 = DummyOperator(
-    task_id='finish_load_to_silver',
-    dag=dag
-)
-
-dummy5 = DummyOperator(
     task_id='start_load_tables',
     dag=dag
 )
 
-dummy6 = DummyOperator(
-    task_id='finish_load_tables',
-    dag=dag
-)
-dummy7 = DummyOperator(
+dummy3 = DummyOperator(
     task_id='start_load_to_dwh',
     dag=dag
 )
@@ -70,7 +51,7 @@ dwh=PythonOperator(
     python_callable=dwh
 )
 
-dummy8 = DummyOperator(
+dummy4 = DummyOperator(
     task_id='finish_load_to_dwh',
     dag=dag
 )
@@ -88,7 +69,9 @@ for table in tables:
         python_callable=load_to_silver_spark,
         op_kwargs={"table": table}
     )
-    dummy1 >> api_bronze >> dummy2 >> dummy3 >> api_silver >> dummy4 >> dummy5 >> load_to_bronze_group >> load_to_silver_group >> dummy6 >> dummy7 >> dwh >>dummy8
+    dummy1 >> api_bronze >> api_silver >> dummy3
+    dummy2 >> load_to_bronze_group >> load_to_silver_group >> dummy3
+    dummy3 >> dwh >> dummy4
 
 
 
